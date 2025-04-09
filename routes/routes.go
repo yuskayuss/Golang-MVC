@@ -41,3 +41,4 @@ func SetupRoutes() *gin.Engine {
 
 	return router
 }
+
