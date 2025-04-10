@@ -61,23 +61,39 @@ func GetUserByID(c *gin.Context) {
 }
 
 
+// controllers/auth_controller.go
+
+
+
 func Register(c *gin.Context) {
-    var input models.User
-    if err := c.ShouldBindJSON(&input); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return
-    }
+	var input struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Role     string `json:"role"` // admin atau user
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Input tidak valid"})
+		return
+	}
 
-    hash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-    input.Password = string(hash)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 
-    if err := config.DB.Create(&input).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal registrasi"})
-        return
-    }
+	user := models.User{
+		Name:     input.Name,
+		Email:    input.Email,
+		Password: string(hashedPassword),
+		Role:     input.Role, // ← role langsung disimpan
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Registrasi berhasil"})
+	if err := config.DB.Create(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Gagal register"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Register berhasil"})
 }
+
 
 func Login(c *gin.Context) {
     var input models.User
@@ -88,21 +104,28 @@ func Login(c *gin.Context) {
         return
     }
 
-    config.DB.Where("email = ?", input.Email).First(&user)
-    if user.ID == 0 {
+    // Cari user dari DB
+    if err := config.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Email tidak ditemukan"})
         return
     }
 
-    err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
-    if err != nil {
+    // Cek password dengan bcrypt
+    if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Password salah"})
         return
     }
 
-    token, _ := utils.GenerateToken(user.Email)
+    // ✅ Buat token pakai ID, email, dan role
+    token, err := utils.GenerateToken(user.ID, user.Email, user.Role)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal generate token"})
+        return
+    }
+
     c.JSON(http.StatusOK, gin.H{"token": token})
 }
+
 
 func Profile(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"message": "Selamat datang di endpoint terproteksi!"})

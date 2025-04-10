@@ -8,18 +8,25 @@ import (
 
 var jwtKey = []byte("secret-key")
 
-func GenerateToken(email string) (string, error) {
+func GenerateToken(userID uint, email, role string) (string, error) {
     claims := jwt.MapClaims{
-        "email": email,
-        "exp":   time.Now().Add(time.Hour * 1).Unix(),
+        "user_id": userID,
+        "email":   email,
+        "role":    role,
+        "exp":     time.Now().Add(time.Hour * 1).Unix(),
     }
 
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
     return token.SignedString(jwtKey)
 }
 
-func ValidateToken(tokenString string) (*jwt.Token, error) {
-    return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+
+func ValidateToken(tokenString string) (*jwt.Token, jwt.MapClaims, error) {
+    claims := jwt.MapClaims{}
+    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
         return jwtKey, nil
     })
+
+    return token, claims, err
 }
+
